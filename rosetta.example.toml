@@ -1,0 +1,28 @@
+# Copy to `rosetta.toml` (next to where you run RosettaAI) and edit.
+# Every key can also be set as an environment variable: ROSETTA_OUTPUT_DIR, …
+
+# --- where transcripts land ------------------------------------------------
+output_dir = "transcripts"
+keep_audio = false            # also keep the decoded 16 kHz WAV
+
+# --- default model ---------------------------------------------------------
+engine  = "faster-whisper"    # faster-whisper | parakeet | canary-qwen
+# model = "large-v3"          # omit to use the engine's default checkpoint
+# device = "cuda"             # omit for auto-detection
+# compute_type = "float16"    # float16 | int8_float16 | int8 | bfloat16
+# language = "en"             # omit to autodetect
+
+# --- server ----------------------------------------------------------------
+host = "127.0.0.1"
+port = 8420
+open_browser = true
+
+# --- fetching --------------------------------------------------------------
+download_timeout = 900.0
+max_download_bytes = 4294967296      # 4 GiB
+allow_private_hosts = false          # true to allow LAN/NAS sources
+
+# --- runtime ---------------------------------------------------------------
+max_concurrent_jobs = 1              # one model in VRAM at a time
+history_limit = 200
+log_level = "INFO"
