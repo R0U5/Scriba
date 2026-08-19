@@ -1,0 +1,8 @@
+# Windows PowerShell 5.1 decodes BOM-less files as ANSI, so keep .ps1 files
+# CRLF and let the UTF-8 BOM committed in them survive a checkout.
+*.ps1 text eol=crlf
+
+# Shell scripts must keep LF endings or bash refuses to run them.
+*.sh  text eol=lf
+
+*.png binary
