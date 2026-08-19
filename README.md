@@ -9,6 +9,21 @@ state-of-the-art open speech models — with a web UI, a CLI, and a REST API.
 
 </div>
 
+<p align="center">
+  <img src="docs/screenshots/home.png" alt="RosettaAI home screen" width="820">
+</p>
+
+<p align="center">
+  <img src="docs/screenshots/live.png" alt="Live transcript preview while a job runs" width="405">
+  <img src="docs/screenshots/models.png" alt="Model picker with accuracy and VRAM figures" width="405">
+</p>
+
+<p align="center"><sub>
+  The interface, captured in this repository's build sandbox. Model weights cannot be
+  downloaded there, so the run above used the bundled test engine — hence the
+  <code>demo-engine</code> badge and the placeholder text. Everything else is the real app.
+</sub></p>
+
 ---
 
 ## Why this exists
@@ -66,6 +81,28 @@ one before loading the next.
 
 ## Install
 
+**Quickest path**, which creates the virtual environment, installs the CUDA
+runtime libraries and checks the result.
+
+Windows:
+
+```powershell
+git clone https://github.com/R0U5/RosettaAI.git
+cd RosettaAI
+powershell -ExecutionPolicy Bypass -File scripts\setup-windows.ps1        # add -Nvidia for Parakeet + Canary
+```
+
+Linux / macOS:
+
+```bash
+git clone https://github.com/R0U5/RosettaAI.git
+cd RosettaAI
+./scripts/setup.sh                                                        # add --nvidia for Parakeet + Canary
+```
+
+<details>
+<summary><b>Or install by hand</b></summary>
+
 ```bash
 git clone https://github.com/R0U5/RosettaAI.git
 cd RosettaAI
@@ -96,6 +133,8 @@ pip install -e ".[nvidia]"
 `imageio-ffmpeg` dependency, so it works out of the box; a system ffmpeg
 (`winget install Gyan.FFmpeg`, `brew install ffmpeg`, `apt install ffmpeg`) is
 used automatically when present and is a little faster.
+
+</details>
 
 Verify everything:
 
