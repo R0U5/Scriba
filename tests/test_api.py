@@ -159,3 +159,40 @@ def test_ui_is_served(client):
     assert "RosettaAI" in page.text
     assert client.get("/static/app.js").status_code == 200
     assert client.get("/static/styles.css").status_code == 200
+
+
+# ------------------------------------------------------------ server start ---
+def test_find_free_port_skips_a_busy_one():
+    import socket
+
+    from rosetta.server.run import find_free_port, port_is_free
+
+    with socket.socket() as taken:
+        taken.bind(("127.0.0.1", 0))
+        taken.listen(1)
+        busy = taken.getsockname()[1]
+        assert not port_is_free("127.0.0.1", busy)
+        assert find_free_port("127.0.0.1", busy) > busy
+
+
+def test_browser_opens_only_once_the_server_answers(settings, monkeypatch):
+    """Opening on a fixed delay lands on a connection error during a cold start."""
+    import socket
+
+    from rosetta.server import run as run_module
+
+    opened = []
+    monkeypatch.setattr(run_module.webbrowser, "open", opened.append)
+
+    with socket.socket() as listener:
+        listener.bind(("127.0.0.1", 0))
+        listener.listen(1)
+        port = listener.getsockname()[1]
+        run_module.open_when_ready("127.0.0.1", port, "http://example.test")
+    assert opened == ["http://example.test"]
+
+    # Nothing listening: no browser window pointed at a dead port.
+    opened.clear()
+    monkeypatch.setattr(run_module, "wait_until_ready", lambda *a, **k: False)
+    run_module.open_when_ready("127.0.0.1", 1, "http://example.test")
+    assert opened == []

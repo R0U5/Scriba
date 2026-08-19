@@ -51,7 +51,10 @@ def main_callback(
 ) -> None:
     """Run with no arguments to open the web interface."""
     if ctx.invoked_subcommand is None:
-        ctx.invoke(serve)
+        # Call the implementation, not the Typer command: invoking a command
+        # function directly hands it Typer's OptionInfo sentinels instead of
+        # the defaults, and settings validation then fails on every field.
+        _run_server()
 
 
 # --------------------------------------------------------------------------- #
@@ -67,13 +70,44 @@ def serve(
     log_level: str = typer.Option("INFO", "--log-level", help="DEBUG, INFO, WARNING or ERROR."),
 ) -> None:
     """Launch the web interface (the default command)."""
+    _run_server(
+        host=host, port=port, output=output,
+        no_browser=no_browser, reload=reload, log_level=log_level,
+    )
+
+
+def _run_server(
+    host: str | None = None,
+    port: int | None = None,
+    output: Path | None = None,
+    *,
+    no_browser: bool = False,
+    reload: bool = False,
+    log_level: str = "INFO",
+) -> None:
+    """Start the web server. Shared by `rosetta serve` and the bare `rosetta`."""
     settings = load_settings(host=host, port=port, output_dir=output, log_level=log_level)
     if no_browser:
         settings.open_browser = False
     settings.ensure_dirs()
     setup_logging(settings.log_level)
 
-    url = f"http://{'localhost' if settings.host == '0.0.0.0' else settings.host}:{settings.port}"
+    from .server.run import find_free_port
+
+    requested = settings.port
+    try:
+        settings.port = find_free_port(settings.host, requested)
+    except OSError as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(1) from exc
+    if settings.port != requested:
+        console.print(
+            f"[yellow]Port {requested} is already in use "
+            f"(RosettaAI may already be running) - using {settings.port} instead.[/yellow]"
+        )
+
+    host_label = "localhost" if settings.host in ("0.0.0.0", "127.0.0.1") else settings.host
+    url = f"http://{host_label}:{settings.port}"
     console.print(
         Panel.fit(
             Text.from_markup(
@@ -87,10 +121,12 @@ def serve(
             padding=(1, 3),
         )
     )
-    from .server import run_server
+    # Import the module, not the name: a module attribute lookup at call time
+    # keeps the indirection explicit and patchable in one canonical place.
+    from .server import run as server_run
 
     try:
-        run_server(settings, reload=reload)
+        server_run.run_server(settings, reload=reload)
     except KeyboardInterrupt:  # pragma: no cover
         console.print("\n[dim]Stopped.[/dim]")
 

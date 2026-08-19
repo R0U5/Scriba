@@ -110,3 +110,56 @@ def test_history_is_empty_at_first(tmp_path, monkeypatch):
     result = runner.invoke(app, ["history"])
     assert result.exit_code == 0
     assert "No transcriptions yet" in result.stdout
+
+
+# ----------------------------------------------------- the default command ---
+def test_bare_command_starts_the_server(monkeypatch, tmp_path):
+    """`rosetta` with no arguments is what run.bat runs, so it must work.
+
+    Invoking the Typer command object directly used to hand it OptionInfo
+    sentinels instead of defaults, and every settings field failed validation.
+    """
+    monkeypatch.chdir(tmp_path)
+    captured = {}
+    monkeypatch.setattr("rosetta.server.run.run_server", lambda settings, **kw: captured.update(
+        host=settings.host, port=settings.port, output_dir=settings.output_dir
+    ))
+
+    result = runner.invoke(app, [])
+    assert result.exit_code == 0, result.output
+    assert isinstance(captured["host"], str)
+    assert isinstance(captured["port"], int)
+    assert isinstance(captured["output_dir"], Path)
+    assert "RosettaAI" in result.stdout
+
+
+def test_serve_command_and_bare_command_agree(monkeypatch, tmp_path):
+    monkeypatch.chdir(tmp_path)
+    seen = []
+    monkeypatch.setattr(
+        "rosetta.server.run.run_server", lambda settings, **kw: seen.append(settings.port)
+    )
+    assert runner.invoke(app, []).exit_code == 0
+    assert runner.invoke(app, ["serve"]).exit_code == 0
+    assert seen[0] == seen[1]
+
+
+def test_busy_port_falls_back_instead_of_crashing(monkeypatch, tmp_path):
+    """A second copy, or a stale one, must not end in an address-in-use trace."""
+    import socket
+
+    monkeypatch.chdir(tmp_path)
+    with socket.socket() as taken:
+        taken.bind(("127.0.0.1", 0))
+        taken.listen(1)
+        busy_port = taken.getsockname()[1]
+
+        chosen = {}
+        monkeypatch.setattr(
+            "rosetta.server.run.run_server", lambda settings, **kw: chosen.update(port=settings.port)
+        )
+        result = runner.invoke(app, ["serve", "--port", str(busy_port)])
+
+    assert result.exit_code == 0, result.output
+    assert chosen["port"] != busy_port
+    assert "already in use" in result.stdout
