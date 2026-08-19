@@ -23,6 +23,9 @@ classifiers = [
 ]
 
 dependencies = [
+  # Everything needed to transcribe out of the box: a default install can do
+  # the job without picking extras.
+  "faster-whisper>=1.1.0",
   "fastapi>=0.110",
   "uvicorn[standard]>=0.27",
   "pydantic>=2.6",
@@ -36,17 +39,24 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-# Default engine. Installed by default via `pip install -e ".[whisper]"` or `[all]`.
-whisper = ["faster-whisper>=1.1.0"]
+# CUDA runtime libraries CTranslate2 loads for GPU inference. The launcher adds
+# this automatically when it finds an NVIDIA GPU, so CPU-only machines are not
+# made to download ~700 MB of CUDA for nothing.
+cuda = [
+  "nvidia-cublas-cu12>=12.3",
+  "nvidia-cudnn-cu12>=9,<10",
+]
 # NVIDIA NeMo engines: Parakeet TDT v3 + Canary-Qwen 2.5B (the accuracy leaders).
-nvidia = ["nemo_toolkit[asr]>=2.3.0", "cuda-python>=12.3"]
+# torch is listed explicitly so the CUDA index mapping below applies to it.
+nvidia = ["torch>=2.4", "nemo_toolkit[asr]>=2.3.0"]
 dev = [
   "pytest>=8.0",
   "pytest-asyncio>=0.23",
   "ruff>=0.4",
   "httpx>=0.27",
 ]
-all = ["rosetta-ai[whisper,nvidia]"]
+# Kept as an alias so older instructions keep working.
+whisper = []
 
 [project.urls]
 Homepage = "https://github.com/R0U5/RosettaAI"

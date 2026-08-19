@@ -29,3 +29,7 @@ Thumbs.db
 # Local config & secrets
 .env
 config.local.toml
+
+# Written by "run.sh install-nvidia"
+.nvidia-enabled
+uv.lock

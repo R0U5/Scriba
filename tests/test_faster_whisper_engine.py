@@ -134,3 +134,77 @@ def test_load_errors_carry_actionable_hints(message, expected):
 
 def test_availability_reports_installed():
     assert FasterWhisperEngine.availability().available is True
+
+
+# --------------------------------------------------------------- weights ----
+def test_repo_id_resolution():
+    from rosetta.engines.faster_whisper_engine import _repo_id_for
+
+    assert _repo_id_for("large-v3") == "Systran/faster-whisper-large-v3"
+    assert _repo_id_for("org/custom-ct2") == "org/custom-ct2"
+    assert _repo_id_for("not-a-real-size") is None
+
+
+def test_allow_patterns_match_faster_whisper(monkeypatch):
+    """We must fetch exactly the files faster-whisper itself asks for."""
+    import inspect
+
+    from rosetta.engines.faster_whisper_engine import ALLOW_PATTERNS
+
+    source = inspect.getsource(faster_whisper.utils.download_model)
+    for pattern in ALLOW_PATTERNS:
+        assert f'"{pattern}"' in source, f"{pattern} is no longer used by faster-whisper"
+
+
+def test_cached_weights_skip_the_download(monkeypatch, tmp_path):
+    """A second run must not touch the network."""
+    calls = []
+    monkeypatch.setattr(
+        "faster_whisper.utils.download_model",
+        lambda model, local_files_only=False, **kw: (calls.append(local_files_only), str(tmp_path))[1],
+    )
+    engine = FasterWhisperEngine(model="large-v3", device="cpu")
+    assert engine._prefetch_weights(None) == str(tmp_path)
+    assert calls == [True], "the cache must be consulted with local_files_only"
+
+
+def test_download_reports_progress(monkeypatch, tmp_path):
+    def missing_from_cache(model, local_files_only=False, **kw):
+        raise FileNotFoundError("not cached")
+
+    monkeypatch.setattr("faster_whisper.utils.download_model", missing_from_cache)
+    monkeypatch.setattr(
+        "rosetta.engines.faster_whisper_engine._remote_size", lambda repo: 3_000_000_000
+    )
+
+    def fake_snapshot(repo_id, allow_patterns=None, tqdm_class=None, **kw):
+        assert repo_id == "Systran/faster-whisper-large-v3"
+        bar = tqdm_class(total=3_000_000_000, unit="B")
+        bar.update(1_500_000_000)
+        bar.update(1_500_000_000)
+        return str(tmp_path)
+
+    monkeypatch.setattr("huggingface_hub.snapshot_download", fake_snapshot)
+
+    messages = []
+    engine = FasterWhisperEngine(model="large-v3", device="cpu")
+    path = engine._prefetch_weights(lambda fraction, message: messages.append((fraction, message)))
+
+    assert path == str(tmp_path)
+    assert "3.0 GB" in messages[0][1] and "first run only" in messages[0][1]
+    assert any("1.50 / 3.0 GB" in message for _, message in messages)
+    assert messages[-1] == (1.0, "Weights downloaded")
+
+
+def test_download_failure_falls_back_to_the_loader(monkeypatch):
+    monkeypatch.setattr(
+        "faster_whisper.utils.download_model",
+        lambda *a, **k: (_ for _ in ()).throw(FileNotFoundError("not cached")),
+    )
+    monkeypatch.setattr("rosetta.engines.faster_whisper_engine._remote_size", lambda repo: None)
+    monkeypatch.setattr(
+        "huggingface_hub.snapshot_download",
+        lambda *a, **k: (_ for _ in ()).throw(OSError("network down")),
+    )
+    engine = FasterWhisperEngine(model="large-v3", device="cpu")
+    assert engine._prefetch_weights(None) == "large-v3"

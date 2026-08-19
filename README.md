@@ -79,54 +79,63 @@ one before loading the next.
 
 ---
 
-## Install
+## Run it
 
-**Quickest path**, which creates the virtual environment, installs the CUDA
-runtime libraries and checks the result.
+**Windows** - download or clone the repo, then **double-click `run.bat`**.
 
-Windows:
+**macOS / Linux** - `./run.sh`
 
-```powershell
-git clone https://github.com/R0U5/RosettaAI.git
-cd RosettaAI
-powershell -ExecutionPolicy Bypass -File scripts\setup-windows.ps1        # add -Nvidia for Parakeet + Canary
+That is the whole install. The launcher fetches [uv](https://docs.astral.sh/uv/)
+if you do not have it, installs a suitable Python if you do not have one,
+creates the environment, installs the dependencies (adding the CUDA libraries
+only when it sees an NVIDIA GPU), and opens <http://localhost:8420>. First run
+takes a couple of minutes; after that it starts in about a second.
+
+You never create a virtual environment, never run `pip`, and never activate
+anything.
+
+```
+run.bat                                              open the web interface
+run.bat transcribe https://youtube.com/watch?v=...   straight to a file
+run.bat doctor                                       check the setup
+run.bat models                                       list models + availability
 ```
 
-Linux / macOS:
+The same arguments work with `./run.sh` on macOS and Linux.
 
-```bash
-git clone https://github.com/R0U5/RosettaAI.git
-cd RosettaAI
-./scripts/setup.sh                                                        # add --nvidia for Parakeet + Canary
+### The two things that take time on a first run
+
+1. **The dependencies** (~2 min, once). Progress is shown in the terminal.
+2. **The model weights** - Whisper large-v3 is about 3 GB, downloaded the first
+   time you use a model. The progress bar shows this as
+   `Downloading large-v3 - 1.20 / 3.09 GB`, so it is obvious what is happening.
+   Later runs load from cache in a few seconds.
+
+### Adding the NVIDIA engines
+
+Parakeet and Canary-Qwen need PyTorch and NVIDIA NeMo, which are several GB, so
+they are opt-in:
+
 ```
+run.bat install-nvidia          # Windows
+./run.sh install-nvidia         # macOS / Linux
+```
+
+Then pick them from the model menu in the UI, or pass `--engine parakeet` on the
+command line.
 
 <details>
-<summary><b>Or install by hand</b></summary>
+<summary><b>Installing with pip instead</b></summary>
+
+RosettaAI is an ordinary Python package, so if you would rather manage the
+environment yourself:
 
 ```bash
-git clone https://github.com/R0U5/RosettaAI.git
-cd RosettaAI
-
-python -m venv .venv
-# Windows:  .venv\Scripts\activate
-source .venv/bin/activate
-
-pip install -e ".[whisper]"        # core app + the default Whisper engine
-```
-
-**GPU acceleration (recommended).** `faster-whisper` runs on CUDA through
-CTranslate2 and needs the NVIDIA runtime libraries:
-
-```bash
-pip install nvidia-cublas-cu12 nvidia-cudnn-cu12==9.*
-```
-
-**The NVIDIA engines (Parakeet + Canary-Qwen)** are an optional extra, because
-they pull in PyTorch and the NeMo toolkit (several GB):
-
-```bash
-pip install torch --index-url https://download.pytorch.org/whl/cu124
-pip install -e ".[nvidia]"
+python -m venv .venv && source .venv/bin/activate    # Windows: .venv\Scripts\activate
+pip install -e .                                     # everything needed to transcribe
+pip install -e ".[cuda]"                             # + CUDA runtime libs for GPU
+pip install -e ".[nvidia]"                           # + Parakeet and Canary-Qwen
+rosetta
 ```
 
 **ffmpeg** is used to decode audio. A static build ships with the
@@ -136,22 +145,11 @@ used automatically when present and is a little faster.
 
 </details>
 
-Verify everything:
-
-```bash
-rosetta doctor
-```
-
 ---
 
 ## Use it
 
 ### Web UI
-
-```bash
-rosetta                       # opens http://localhost:8420
-rosetta serve --port 9000 --no-browser
-```
 
 Paste a link, press <kbd>Enter</kbd>, watch the stages advance. Shortcuts:
 <kbd>N</kbd> new, <kbd>M</kbd> model picker, <kbd>/</kbd> search,
@@ -160,18 +158,18 @@ Paste a link, press <kbd>Enter</kbd>, watch the stages advance. Shortcuts:
 ### CLI
 
 ```bash
-rosetta transcribe "https://www.youtube.com/watch?v=..." 
-rosetta transcribe talk.m4a --engine parakeet --format txt,srt,vtt
-rosetta transcribe interview.mp3 --model large-v3 --language de --translate
-rosetta transcribe show.mp3 --quiet          # prints only the written paths
+./run.sh transcribe "https://www.youtube.com/watch?v=..."
+./run.sh transcribe talk.m4a --engine parakeet --format txt,srt,vtt
+./run.sh transcribe interview.mp3 --model large-v3 --language de --translate
+./run.sh transcribe show.mp3 --quiet          # prints only the written paths
 
-rosetta models                                # catalogue + availability
-rosetta history -n 20                         # what you have transcribed
+./run.sh models                                # catalogue + availability
+./run.sh history -n 20                         # what you have transcribed
 ```
 
 ### REST API
 
-The server is a normal FastAPI app — interactive docs at `/api/docs`.
+The server is a normal FastAPI app - interactive docs at `/api/docs`.
 
 ```bash
 curl -X POST localhost:8420/api/jobs \
@@ -245,7 +243,7 @@ Design decisions worth knowing:
 ## Development
 
 ```bash
-pip install -e ".[whisper,dev]"
+pip install -e ".[dev]"
 pytest -q
 ruff check src tests
 ```

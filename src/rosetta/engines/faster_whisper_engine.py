@@ -9,6 +9,7 @@ headroom on a 12 GB card such as an RTX 4070.
 from __future__ import annotations
 
 import time
+from pathlib import Path
 
 from ..errors import JobCancelled, TranscriptionError
 from ..logging_setup import get_logger
@@ -129,10 +130,14 @@ class FasterWhisperEngine(ASREngine):
 
         if progress:
             progress(0.0, f"Loading {self.model_id} on {self.device.upper()}…")
+        # Weights are fetched first, with progress: faster-whisper downloads them
+        # silently, which makes a 3 GB first run look like a hang.
+        source = self._prefetch_weights(progress)
+
         started = time.monotonic()
         try:
             self._model = WhisperModel(
-                self.model_id,
+                source,
                 device=self.device,
                 compute_type=self.compute_type,
                 cpu_threads=0,  # 0 -> use every physical core
@@ -250,6 +255,68 @@ class FasterWhisperEngine(ASREngine):
             word_count=word_count(text),
         )
 
+    # -- weights -----------------------------------------------------------
+    def _prefetch_weights(self, progress: ProgressCB | None) -> str:
+        """Make sure the weights are on disk, reporting download progress.
+
+        Returns a local directory when it can, otherwise the model id so that
+        faster-whisper resolves it the usual way. Any failure here is
+        non-fatal: the model loader will report a proper error if the weights
+        really are unavailable.
+        """
+        if Path(self.model_id).is_dir():
+            return self.model_id
+
+        try:
+            from faster_whisper.utils import download_model
+        except ImportError:  # pragma: no cover - checked by availability()
+            return self.model_id
+
+        # Already downloaded? Then this returns instantly and touches no network.
+        try:
+            return download_model(self.model_id, local_files_only=True)
+        except Exception:
+            pass
+
+        repo_id = _repo_id_for(self.model_id)
+        if repo_id is None:
+            return self.model_id
+
+        total = _remote_size(repo_id)
+        if progress:
+            size = f" ({total / 1e9:.1f} GB)" if total else ""
+            progress(0.0, f"Downloading {self.model_id}{size} — first run only")
+
+        try:
+            from huggingface_hub import snapshot_download
+
+            downloaded = 0
+
+            def report(chunk: int) -> None:
+                nonlocal downloaded
+                downloaded += chunk
+                if not progress:
+                    return
+                if total:
+                    progress(
+                        min(downloaded / total, 0.99),
+                        f"Downloading {self.model_id} · {downloaded / 1e9:.2f} / {total / 1e9:.1f} GB",
+                    )
+                else:
+                    progress(0.0, f"Downloading {self.model_id} · {downloaded / 1e6:.0f} MB")
+
+            path = snapshot_download(
+                repo_id,
+                allow_patterns=ALLOW_PATTERNS,
+                tqdm_class=_reporting_tqdm(report),
+            )
+            if progress:
+                progress(1.0, "Weights downloaded")
+            return path
+        except Exception as exc:
+            log.debug("Prefetch of %s failed (%s); falling back to the loader", repo_id, exc)
+            return self.model_id
+
     def _batch_size(self) -> int:
         """Pick a batch size that fits the detected card."""
         vram = detect_gpu().total_vram_gb or 0.0
@@ -260,6 +327,64 @@ class FasterWhisperEngine(ASREngine):
         if vram >= 6:
             return 4
         return 2
+
+
+#: The files a CTranslate2 Whisper model actually needs, mirroring
+#: faster_whisper.utils.download_model so no extra weights are fetched.
+ALLOW_PATTERNS = [
+    "config.json",
+    "preprocessor_config.json",
+    "model.bin",
+    "tokenizer.json",
+    "vocabulary.*",
+]
+
+
+def _repo_id_for(model_id: str) -> str | None:
+    """Map a size name such as ``large-v3`` to its Hugging Face repository."""
+    if "/" in model_id:
+        return model_id
+    try:
+        from faster_whisper.utils import _MODELS
+
+        return _MODELS.get(model_id)
+    except Exception:  # pragma: no cover - private API moved
+        return None
+
+
+def _remote_size(repo_id: str) -> int | None:
+    """Total download size in bytes, or ``None`` when it cannot be determined."""
+    try:
+        from fnmatch import fnmatch
+
+        from huggingface_hub import HfApi
+
+        info = HfApi().model_info(repo_id, files_metadata=True)
+        total = sum(
+            sibling.size or 0
+            for sibling in (info.siblings or [])
+            if any(fnmatch(sibling.rfilename, pattern) for pattern in ALLOW_PATTERNS)
+        )
+        return total or None
+    except Exception:  # pragma: no cover - offline or API change
+        return None
+
+
+def _reporting_tqdm(report):
+    """A tqdm class that forwards byte counts instead of drawing a bar."""
+    from tqdm.auto import tqdm as base_tqdm
+
+    class ReportingTqdm(base_tqdm):
+        def __init__(self, *args, **kwargs):
+            kwargs["disable"] = True  # our own UI shows the progress
+            super().__init__(*args, **kwargs)
+
+        def update(self, n=1):
+            if n:
+                report(n)
+            return super().update(n)
+
+    return ReportingTqdm
 
 
 def _clock(seconds: float) -> str:
