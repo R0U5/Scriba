@@ -219,7 +219,7 @@ def create_app(settings: Settings | None = None, manager: JobManager | None = No
                     try:
                         payload = await asyncio.wait_for(client.get(), timeout=15.0)
                         yield f"event: job\ndata: {payload}\n\n"
-                    except asyncio.TimeoutError:
+                    except TimeoutError:
                         yield f": keepalive {int(time.time())}\n\n"
             finally:
                 hub.unregister(client)

@@ -86,10 +86,11 @@ one before loading the next.
 **macOS / Linux** - `./run.sh`
 
 That is the whole install. The launcher fetches [uv](https://docs.astral.sh/uv/)
-if you do not have it, installs a suitable Python if you do not have one,
-creates the environment, installs the dependencies (adding the CUDA libraries
-only when it sees an NVIDIA GPU), and opens <http://localhost:8420>. First run
-takes a couple of minutes; after that it starts in about a second.
+if you do not have it, downloads the exact Python this project pins (3.12 -
+whatever is already on your machine is ignored), creates the environment,
+installs the dependencies (adding the CUDA libraries only when it sees an
+NVIDIA GPU), and opens <http://localhost:8420>. First run takes a couple of
+minutes; after that it starts in about a second.
 
 You never create a virtual environment, never run `pip`, and never activate
 anything.

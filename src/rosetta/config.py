@@ -10,6 +10,7 @@ Resolution order (last wins):
 from __future__ import annotations
 
 import os
+import tomllib
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
@@ -18,11 +19,6 @@ from platformdirs import user_cache_dir, user_data_dir
 from pydantic import BaseModel, Field
 
 from .errors import ConfigError
-
-try:  # Python 3.11+
-    import tomllib
-except ModuleNotFoundError:  # pragma: no cover - 3.10 fallback
-    tomllib = None  # type: ignore[assignment]
 
 APP_NAME = "rosetta"
 ENV_PREFIX = "ROSETTA_"
@@ -84,11 +80,6 @@ def _config_candidates() -> list[Path]:
 
 
 def _load_toml(path: Path) -> dict[str, Any]:
-    if tomllib is None:  # pragma: no cover
-        raise ConfigError(
-            "Reading rosetta.toml needs Python 3.11+ (or the 'tomli' package).",
-            hint="Upgrade Python, or configure RosettaAI with ROSETTA_* environment variables.",
-        )
     try:
         with path.open("rb") as handle:
             data = tomllib.load(handle)

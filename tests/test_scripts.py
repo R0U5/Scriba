@@ -6,6 +6,7 @@ mistake here is the first thing a new user sees.
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[1]
@@ -97,3 +98,48 @@ def test_nvidia_install_verifies_cuda_is_actually_available():
     for script in (UNIX_SCRIPT, WINDOWS_SCRIPT):
         text = script.read_text(encoding="utf-8-sig")
         assert "torch.cuda.is_available()" in text
+
+
+# ------------------------------------------------------------- python pin ----
+def _pyproject() -> dict:
+    import tomllib
+
+    return tomllib.loads((REPO / "pyproject.toml").read_text())
+
+
+def test_python_version_is_pinned_for_the_launcher():
+    """uv must not be free to pick whatever Python happens to be installed.
+
+    A machine with Python 3.10 resolved onnxruntime 1.24.3, which ships no
+    cp310 wheels, and the launcher died before it ever started.
+    """
+    pin = (REPO / ".python-version").read_text().strip()
+    assert pin, ".python-version must name the interpreter uv should use"
+
+    floor = _pyproject()["project"]["requires-python"]
+    assert floor.startswith(">=")
+    pinned = tuple(int(part) for part in pin.split("."))
+    minimum = tuple(int(part) for part in floor.removeprefix(">=").split("."))
+    assert pinned >= minimum, f"the pinned {pin} is below requires-python {floor}"
+
+
+def test_requires_python_matches_what_the_dependencies_support():
+    """onnxruntime, via faster-whisper, dropped 3.10 wheels."""
+    floor = _pyproject()["project"]["requires-python"]
+    assert tuple(int(p) for p in floor.removeprefix(">=").split(".")) >= (3, 11)
+
+
+def test_ci_tests_the_pinned_version_and_nothing_below_the_floor():
+    workflow = (REPO / ".github" / "workflows" / "ci.yml").read_text()
+    floor = tuple(
+        int(p) for p in _pyproject()["project"]["requires-python"].removeprefix(">=").split(".")
+    )
+    matrix = re.search(r'python-version: \[(.*?)\]', workflow)
+    assert matrix, "the CI matrix should list Python versions"
+    versions = [v.strip().strip('"') for v in matrix.group(1).split(",")]
+
+    assert (REPO / ".python-version").read_text().strip() in versions
+    for version in versions:
+        assert tuple(int(p) for p in version.split(".")) >= floor, (
+            f"CI still tests Python {version}, below the {floor} floor"
+        )

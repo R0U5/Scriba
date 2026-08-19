@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 from . import __version__
@@ -176,7 +176,7 @@ def render_json(
 ) -> str:
     payload = {
         "rosetta_version": __version__,
-        "created_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        "created_at": datetime.now(UTC).isoformat(timespec="seconds"),
         "media": media.model_dump() if media else None,
         "options": options.model_dump(mode="json") if options else None,
         "transcript": {

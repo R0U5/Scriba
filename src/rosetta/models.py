@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import time
 import uuid
-from enum import Enum
+from enum import StrEnum
 
 from pydantic import BaseModel, Field
 
@@ -14,12 +14,12 @@ def new_id() -> str:
     return uuid.uuid4().hex[:12]
 
 
-class Task(str, Enum):
+class Task(StrEnum):
     TRANSCRIBE = "transcribe"
     TRANSLATE = "translate"  # speech -> English text (Whisper family only)
 
 
-class OutputFormat(str, Enum):
+class OutputFormat(StrEnum):
     TXT = "txt"
     SRT = "srt"
     VTT = "vtt"
@@ -28,7 +28,7 @@ class OutputFormat(str, Enum):
     TSV = "tsv"
 
 
-class JobStatus(str, Enum):
+class JobStatus(StrEnum):
     QUEUED = "queued"
     RUNNING = "running"
     COMPLETED = "completed"
@@ -36,7 +36,7 @@ class JobStatus(str, Enum):
     CANCELLED = "cancelled"
 
 
-class JobStage(str, Enum):
+class JobStage(StrEnum):
     """Ordered pipeline stages. The UI renders these as a timeline."""
 
     QUEUED = "queued"
