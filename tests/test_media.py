@@ -1,3 +1,5 @@
+import os
+
 import numpy as np
 import pytest
 
@@ -5,6 +7,7 @@ from rosetta.config import Settings
 from rosetta.errors import InvalidURLError, MediaError
 from rosetta.media.audio import decode_to_wav, plan_chunks, read_wav, wav_duration, write_wav
 from rosetta.media.fetch import (
+    _as_local_path,
     _is_media_content_type,
     _looks_like_direct_media,
     fetch_media,
@@ -97,6 +100,30 @@ def test_fetch_media_accepts_local_paths(tone_mp3, tmp_path):
     assert result.path == tone_mp3
     assert result.info.extractor == "local file"
     assert result.from_cache
+
+
+def test_fetch_media_accepts_windows_style_path(tone_mp3):
+    # On Windows, backslash paths must be treated as local, not mangled into
+    # https://C:\…
+    windows = str(tone_mp3.resolve()).replace("/", "\\")
+    if os.name == "nt":
+        result = fetch_media(windows, tone_mp3.parent, Settings())
+        assert result.path == tone_mp3.resolve()
+    else:
+        # POSIX: a Windows drive path (with a drive letter) cannot exist locally
+        # and must fail cleanly, proving it never reaches URL validation.
+        with pytest.raises(InvalidURLError):
+            fetch_media(r"C:\Users\willi\Downloads\Jessica Starling", tone_mp3.parent, Settings())
+
+
+def test_fetch_media_rejects_missing_windows_path(tmp_path):
+    with pytest.raises(InvalidURLError):
+        _as_local_path(r"C:\Users\willi\Downloads\Jessica Starling")
+
+
+def test_fetch_media_rejects_directory_path(tmp_path):
+    with pytest.raises(InvalidURLError, match="folder"):
+        fetch_media(str(tmp_path), tmp_path, Settings())
 
 
 def test_fetch_media_reports_missing_local_file(tmp_path):
