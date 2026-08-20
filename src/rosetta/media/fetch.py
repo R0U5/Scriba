@@ -210,19 +210,51 @@ def fetch_media(
 
 
 def _as_local_path(url: str) -> Path | None:
-    """Accept plain filesystem paths and ``file://`` URLs as sources."""
+    """Accept plain filesystem paths and ``file://`` URLs as sources.
+
+    Windows drive-letter and backslash paths are treated as local even though
+    they carry no ``://`` scheme — they must never fall through to URL
+    validation, which would otherwise mangle ``C:\…`` into ``https://C:\…``.
+    """
     if url.startswith("file://"):
         parsed = urlparse(url)
         candidate = Path(unquote(parsed.path))
         if parsed.netloc and not candidate.exists():  # Windows UNC-ish
             candidate = Path(unquote(f"//{parsed.netloc}{parsed.path}"))
+        if candidate.is_dir():
+            raise InvalidURLError(
+                f"'{candidate}' is a folder, not a media file.",
+                hint="Point RosettaAI at a single audio or video file inside it.",
+            )
         if candidate.exists():
             return candidate.resolve()
         raise InvalidURLError(f"Local file not found: {candidate}")
     if "://" in url:
         return None
-    candidate = Path(url).expanduser()
-    return candidate.resolve() if candidate.is_file() else None
+
+    # A drive letter or a backslash means a local (Windows) path, never a host.
+    if url[:2].isascii() and len(url) > 2 and url[1] == ":" and url[2] in "\\/":
+        candidate = Path(url.replace("\\", "/")).expanduser()
+    elif "\\" in url:
+        candidate = Path(url.replace("\\", "/")).expanduser()
+    else:
+        candidate = Path(url).expanduser()
+
+    if candidate.is_dir():
+        raise InvalidURLError(
+            f"'{candidate}' is a folder, not a media file.",
+            hint="Point RosettaAI at a single audio or video file inside it.",
+        )
+    if candidate.is_file():
+        return candidate.resolve()
+    # A Windows-style path that does not exist must not be re-interpreted as a
+    # URL (it would become https://C:\…). Fail with a clear message instead.
+    if url[:2].isascii() and len(url) > 2 and url[1] == ":" and url[2] in "\\/":
+        raise InvalidURLError(
+            f"Local file not found: {candidate}",
+            hint="Check the path and the file name, then try again.",
+        )
+    return None
 
 
 # --------------------------------------------------------------------------- #
