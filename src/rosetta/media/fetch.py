@@ -233,9 +233,7 @@ def _as_local_path(url: str) -> Path | None:
         return None
 
     # A drive letter or a backslash means a local (Windows) path, never a host.
-    if url[:2].isascii() and len(url) > 2 and url[1] == ":" and url[2] in "\\/":
-        candidate = Path(url.replace("\\", "/")).expanduser()
-    elif "\\" in url:
+    if url[:2].isascii() and len(url) > 2 and url[1] == ":" and url[2] in "\\/" or "\\" in url:
         candidate = Path(url.replace("\\", "/")).expanduser()
     else:
         candidate = Path(url).expanduser()
