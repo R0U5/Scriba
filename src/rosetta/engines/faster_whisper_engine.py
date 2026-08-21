@@ -8,6 +8,8 @@ headroom on a 12 GB card such as an RTX 4070.
 
 from __future__ import annotations
 
+import contextlib
+import os
 import time
 from pathlib import Path
 
@@ -28,6 +30,44 @@ from .base import (
 )
 
 log = get_logger(__name__)
+
+
+def _expose_cuda_dll_dirs() -> None:
+    """Windows: register CUDA DLL directories before CTranslate2 resolves them.
+
+    CTranslate2 loads cuBLAS / cuDNN via ``ctypes.CDLL`` at decode time, and on
+    Python 3.8+ Windows no longer scans ``PATH`` for that.  The ``nvidia-cublas-cu12``
+    and ``nvidia-cudnn-cu12`` pip packages drop their DLLs in a ``nvbin``-style
+    directory under ``site-packages``; torch bundles its own matching set in
+    ``torch/lib``.  We add every candidate directory so the one CTranslate2 needs
+    (``cublas64_12.dll``) is always on the search path.  No-op off Windows.
+    """
+    if os.name != "nt":
+        return
+
+    candidates: list[str] = []
+
+    # torch ships cuBLAS/cuDNN that are guaranteed version-matched.
+    with contextlib.suppress(Exception):
+        import torch  # noqa: F401
+
+        torch_lib = os.path.join(os.path.dirname(torch.__file__), "lib")
+        if os.path.isdir(torch_lib):
+            candidates.append(torch_lib)
+
+    # NVIDIA CUDA runtime pip wheels (nvidia-cublas-cu12, nvidia-cudnn-cu12, etc.)
+    # all install their DLLs under site-packages/nvidia/<component>/bin/.
+    with contextlib.suppress(Exception):
+        import sysconfig
+
+        sp = Path(sysconfig.get_paths()["purelib"])
+        for bin_dir in sp.glob("nvidia/*/bin"):
+            if bin_dir.is_dir():
+                candidates.append(str(bin_dir))
+
+    for directory in candidates:
+        with contextlib.suppress(Exception):
+            os.add_dll_directory(directory)
 
 SPEC = EngineSpec(
     key="faster-whisper",
@@ -126,6 +166,8 @@ class FasterWhisperEngine(ASREngine):
         if self._loaded:
             return
         self.ensure_available()
+        if self.device == "cuda":
+            _expose_cuda_dll_dirs()
         from faster_whisper import BatchedInferencePipeline, WhisperModel
 
         if progress:
@@ -198,7 +240,7 @@ class FasterWhisperEngine(ASREngine):
             else:
                 iterator, info = self._model.transcribe(str(audio.path), **kwargs)
         except Exception as exc:
-            raise TranscriptionError(f"Whisper failed to start: {exc}") from exc
+            raise _decode_error(exc, stage="Whisper failed to start") from exc
 
         total = audio.duration or float(getattr(info, "duration", 0.0)) or 0.0
         segments: list[Segment] = []
@@ -234,7 +276,7 @@ class FasterWhisperEngine(ASREngine):
         except JobCancelled:
             raise
         except Exception as exc:
-            raise TranscriptionError(f"Whisper failed while decoding: {exc}") from exc
+            raise _decode_error(exc) from exc
 
         elapsed = time.monotonic() - started
         text = " ".join(texts).strip()
@@ -393,9 +435,41 @@ def _clock(seconds: float) -> str:
     return f"{hours:d}:{minutes:02d}:{secs:02d}" if hours else f"{minutes:d}:{secs:02d}"
 
 
+_CUDA_MISSING_HINT = (
+    "On Windows the nvidia CUDA runtime pip packages must be installed "
+    "(or you can fall back to CPU):\n"
+    "  1) pip install '.[cuda]'   # installs nvidia-cublas-cu12 + nvidia-cudnn-cu12\n"
+    "  2) or: set device to cpu  (rosetta transcribe ... --device cpu)\n"
+    "The DLL cublas64_12.dll is provided by nvidia-cublas-cu12, which faster-whisper "
+    "needs to talk to your GPU."
+)
+
+
+def _decode_error(exc: Exception, stage: str = "Whisper failed while decoding") -> TranscriptionError:
+    """Classify errors raised during transcription/decoding, not just loading."""
+    text = str(exc).lower()
+    if "cublas" in text or "cudnn" in text:
+        return TranscriptionError(
+            "The CUDA runtime library could not be loaded on this Windows machine.",
+            hint=_CUDA_MISSING_HINT,
+        )
+    if "out of memory" in text:
+        return TranscriptionError(
+            f"{stage}: the GPU ran out of memory.",
+            hint="Pick a smaller model (large-v3-turbo) or set compute_type to int8_float16.",
+        )
+    return TranscriptionError(f"{stage}: {exc}")
+
+
 def _load_error(exc: Exception, model: str, device: str, compute_type: str) -> TranscriptionError:
     text = str(exc).lower()
-    if "out of memory" in text or "cublas" in text:
+    # "cublas" here means the CUDA library itself could not be loaded — not OOM.
+    if "cublas" in text or "cudnn" in text:
+        return TranscriptionError(
+            f"Could not load the CUDA runtime libraries needed by {model}.",
+            hint=_CUDA_MISSING_HINT,
+        )
+    if "out of memory" in text:
         return TranscriptionError(
             f"The GPU ran out of memory loading {model}.",
             hint="Pick a smaller model (large-v3-turbo) or set compute_type to int8_float16.",

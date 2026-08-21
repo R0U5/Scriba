@@ -122,6 +122,7 @@ def test_batch_size_scales_with_vram(monkeypatch):
     ("message", "expected"),
     [
         ("CUDA failed with error out of memory", "smaller model"),
+        ("Library cublas64_12.dll is not found or cannot be loaded", "[cuda]"),
         ("Could not resolve host: huggingface.co", "internet access"),
         ("Requested unsupported compute type", "float16 on CUDA"),
     ],
