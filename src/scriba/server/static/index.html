@@ -1,0 +1,277 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Scriba — local transcription</title>
+<meta name="description" content="Transcribe any audio or video URL locally with state-of-the-art open ASR models." />
+<link rel="stylesheet" href="/static/styles.css" />
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ctext y='26' font-size='26'%3E%F0%9F%8E%99%EF%B8%8F%3C/text%3E%3C/svg%3E" />
+</head>
+<body>
+<div class="app" id="app">
+
+  <!-- ────────────────────────────── sidebar ────────────────────────────── -->
+  <aside class="sidebar" id="sidebar">
+    <header class="sidebar__head">
+      <a class="brand" href="/" aria-label="Scriba home">
+        <span class="brand__mark" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+            <path d="M4 13v-2M8 16V8M12 19V5M16 16V8M20 13v-2" />
+          </svg>
+        </span>
+        <span class="brand__text">
+          <strong>Scriba<span class="brand__ai">AI</span></strong>
+          <small id="version-label">local transcription</small>
+        </span>
+      </a>
+      <button class="icon-btn sidebar__close" id="sidebar-close" aria-label="Close menu">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+      </button>
+    </header>
+
+    <button class="btn btn--primary btn--block" id="new-job-btn">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+      New transcription
+    </button>
+
+    <nav class="history" aria-label="Transcription history">
+      <div class="history__head">
+        <h2>Library</h2>
+        <button class="link-btn" id="clear-history-btn" title="Clear finished jobs">Clear</button>
+      </div>
+      <ul class="history__list" id="history-list"></ul>
+      <p class="history__empty" id="history-empty">Nothing here yet. Your transcripts will appear in this list.</p>
+    </nav>
+
+    <footer class="sysbar" id="sysbar">
+      <div class="sysbar__row">
+        <span class="chip" id="chip-device" title="Compute device"><span class="dot"></span><span>Detecting…</span></span>
+        <span class="chip" id="chip-ffmpeg" title="ffmpeg status"><span class="dot"></span><span>ffmpeg</span></span>
+      </div>
+      <button class="sysbar__path" id="output-dir-btn" title="Click to change where transcripts are saved">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
+        <span id="output-dir-label">transcripts/</span>
+      </button>
+    </footer>
+  </aside>
+
+  <!-- ──────────────────────────────  main  ────────────────────────────── -->
+  <main class="main" id="main">
+    <header class="topbar">
+      <button class="icon-btn topbar__menu" id="sidebar-open" aria-label="Open menu">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+      </button>
+      <div class="topbar__title" id="topbar-title">Transcribe</div>
+      <div class="topbar__actions">
+        <button class="icon-btn" id="theme-btn" aria-label="Toggle colour theme" title="Toggle theme (T)">
+          <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+          <svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
+        </button>
+        <a class="icon-btn" id="docs-btn" href="/api/docs" target="_blank" rel="noreferrer" aria-label="API documentation" title="API docs">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19V6a2 2 0 0 1 2-2h9l5 5v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"/><path d="M14 4v5h5"/></svg>
+        </a>
+      </div>
+    </header>
+
+    <div class="scroll" id="scroll">
+
+      <!-- ── composer ── -->
+      <section class="composer" id="composer">
+        <div class="composer__inner">
+          <h1 class="hero__title">Turn any link into text.</h1>
+          <p class="hero__sub">
+            Paste a YouTube, podcast, lecture or direct media URL. Everything is transcribed
+            on your own GPU with open state-of-the-art models — no uploads, no API keys.
+          </p>
+
+          <form class="urlbar" id="url-form" autocomplete="off">
+            <span class="urlbar__icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M10 13a5 5 0 0 0 7.1 0l3-3a5 5 0 0 0-7.1-7.1L11.5 4.4"/><path d="M14 11a5 5 0 0 0-7.1 0l-3 3a5 5 0 0 0 7.1 7.1l1.4-1.4"/></svg>
+            </span>
+            <input id="url-input" name="url" type="text" spellcheck="false"
+                   placeholder="Paste a link to any audio or video…"
+                   aria-label="Media URL" />
+            <button class="btn btn--primary urlbar__submit" id="submit-btn" type="submit">
+              <span>Transcribe</span>
+              <kbd>⏎</kbd>
+            </button>
+          </form>
+
+          <div class="options" id="options">
+            <button class="chipbtn" id="engine-chip" type="button" title="Choose the model (M)">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M12 3v3M12 18v3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M3 12h3M18 12h3M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1"/><circle cx="12" cy="12" r="3.2"/></svg>
+              <span id="engine-chip-label">Whisper large-v3</span>
+            </button>
+
+            <div class="select-wrap">
+              <select id="language-select" aria-label="Language" title="Spoken language"></select>
+            </div>
+
+            <div class="select-wrap">
+              <select id="task-select" aria-label="Task" title="Transcribe or translate to English">
+                <option value="transcribe">Transcribe</option>
+                <option value="translate">Translate → English</option>
+              </select>
+            </div>
+
+            <button class="chipbtn" id="formats-chip" type="button" title="Output formats">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19V6a2 2 0 0 1 2-2h9l5 5v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"/><path d="M14 4v5h5"/></svg>
+              <span id="formats-chip-label">txt · srt · json</span>
+            </button>
+
+            <button class="chipbtn chipbtn--ghost" id="advanced-chip" type="button" aria-expanded="false">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/><circle cx="9" cy="6" r="2" fill="currentColor" stroke="none"/><circle cx="15" cy="12" r="2" fill="currentColor" stroke="none"/><circle cx="8" cy="18" r="2" fill="currentColor" stroke="none"/></svg>
+              <span>Advanced</span>
+            </button>
+          </div>
+
+          <div class="advanced" id="advanced-panel" hidden>
+            <label class="field">
+              <span class="field__label">Prompt / vocabulary hint</span>
+              <input type="text" id="prompt-input" placeholder="Names, jargon and spellings to bias towards" />
+            </label>
+            <div class="advanced__grid">
+              <label class="field field--inline">
+                <input type="checkbox" id="vad-check" checked />
+                <span><strong>Voice activity filter</strong><small>Skips silence, prevents hallucinated text</small></span>
+              </label>
+              <label class="field field--inline">
+                <input type="checkbox" id="words-check" />
+                <span><strong>Word-level timestamps</strong><small>Precise subtitle timing, slightly slower</small></span>
+              </label>
+              <label class="field">
+                <span class="field__label">Beam size <em id="beam-value">5</em></span>
+                <input type="range" id="beam-range" min="1" max="10" step="1" value="5" />
+              </label>
+              <label class="field">
+                <span class="field__label">Save to folder</span>
+                <input type="text" id="outdir-input" spellcheck="false" placeholder="transcripts/" />
+              </label>
+            </div>
+          </div>
+
+          <div class="samples" id="samples">
+            <span>Try:</span>
+            <button type="button" data-url="https://www.youtube.com/watch?v=aircAruvnKk">a YouTube lecture</button>
+            <button type="button" data-url="https://traffic.libsyn.com/secure/lexfridman/lex_ai_sample.mp3">a podcast episode</button>
+            <button type="button" data-url="https://upload.wikimedia.org/wikipedia/commons/2/22/JFK_inaugural_address_excerpt.ogg">a speech recording</button>
+          </div>
+
+          <div class="pillars">
+            <div class="pillar">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="3"/><rect x="9" y="9" width="6" height="6" rx="1"/><path d="M9 2v2M15 2v2M9 20v2M15 20v2M2 9h2M2 15h2M20 9h2M20 15h2"/></svg>
+              <strong>Runs on your GPU</strong>
+              <p>Whisper, Parakeet and Canary-Qwen execute locally. The audio never leaves this machine.</p>
+            </div>
+            <div class="pillar">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19V6a2 2 0 0 1 2-2h9l5 5v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"/><path d="M14 4v5h5M8 13h8M8 17h5"/></svg>
+              <strong>Six output formats</strong>
+              <p>Plain text, subtitles, Markdown and structured JSON, written side by side to your folder.</p>
+            </div>
+            <div class="pillar">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 4 6v6c0 4.4 3.2 8.2 8 9 4.8-.8 8-4.6 8-9V6z"/><path d="m9 12 2 2 4-4"/></svg>
+              <strong>No keys, no uploads</strong>
+              <p>Nothing is sent to a transcription service — the only traffic is fetching your media.</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ── job detail ── -->
+      <section class="job" id="job-view" hidden>
+        <header class="job__head">
+          <div class="job__heading">
+            <h2 id="job-title">Transcription</h2>
+            <div class="job__meta" id="job-meta"></div>
+          </div>
+          <div class="job__tools" id="job-tools"></div>
+        </header>
+
+        <div class="progress-card" id="progress-card">
+          <div class="progress-card__top">
+            <span class="progress-card__message" id="progress-message">Starting…</span>
+            <span class="progress-card__pct" id="progress-pct">0%</span>
+          </div>
+          <div class="bar"><div class="bar__fill" id="progress-fill"></div></div>
+          <ol class="stages" id="stages"></ol>
+        </div>
+
+        <div class="alert alert--error" id="error-card" hidden>
+          <div class="alert__icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 7.5v5.5M12 16.2v.1"/></svg>
+          </div>
+          <div class="alert__body">
+            <strong id="error-title">Something went wrong</strong>
+            <p id="error-message"></p>
+            <p class="alert__hint" id="error-hint"></p>
+          </div>
+          <button class="btn btn--ghost" id="error-retry">Retry</button>
+        </div>
+
+        <div class="stats" id="stats" hidden></div>
+
+        <div class="transcript" id="transcript-card" hidden>
+          <div class="transcript__toolbar">
+            <span class="live" id="live-badge" hidden><i></i>Live</span>
+            <div class="search">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+              <input type="search" id="search-input" placeholder="Search transcript  (/)" aria-label="Search transcript" />
+              <span class="search__count" id="search-count"></span>
+            </div>
+            <div class="segmented" role="tablist" aria-label="Transcript view">
+              <button data-view="segments" class="is-active" role="tab">Timestamps</button>
+              <button data-view="reading" role="tab">Reading</button>
+            </div>
+            <div class="transcript__actions">
+              <button class="btn btn--ghost btn--sm" id="copy-btn" title="Copy transcript (C)">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/></svg>
+                Copy
+              </button>
+              <div class="downloads" id="downloads"></div>
+            </div>
+          </div>
+          <div class="transcript__body" id="transcript-body"></div>
+        </div>
+      </section>
+    </div>
+  </main>
+</div>
+
+<!-- ────────────────────────────── modals ────────────────────────────── -->
+<div class="modal" id="engine-modal" hidden>
+  <div class="modal__backdrop" data-close></div>
+  <div class="modal__panel modal__panel--wide" role="dialog" aria-modal="true" aria-labelledby="engine-modal-title">
+    <header class="modal__head">
+      <div>
+        <h3 id="engine-modal-title">Choose a model</h3>
+        <p class="modal__sub">Accuracy is the average word error rate on the Open ASR Leaderboard — lower is better.</p>
+      </div>
+      <button class="icon-btn" data-close aria-label="Close">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+      </button>
+    </header>
+    <div class="modal__body" id="engine-list"></div>
+  </div>
+</div>
+
+<div class="modal" id="formats-modal" hidden>
+  <div class="modal__backdrop" data-close></div>
+  <div class="modal__panel" role="dialog" aria-modal="true" aria-labelledby="formats-modal-title">
+    <header class="modal__head">
+      <div>
+        <h3 id="formats-modal-title">Output files</h3>
+        <p class="modal__sub">Every selected format is written next to the others in your output folder.</p>
+      </div>
+      <button class="icon-btn" data-close aria-label="Close">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+      </button>
+    </header>
+    <div class="modal__body" id="formats-list"></div>
+  </div>
+</div>
+
+<div class="toasts" id="toasts" aria-live="polite"></div>
+<script src="/static/app.js" type="module"></script>
+</body>
+</html>
