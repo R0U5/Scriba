@@ -117,6 +117,22 @@ class TranscriptionOptions(BaseModel):
     initial_prompt: str | None = None
     temperature: float = 0.0
 
+    def validate(self, defaults: dict) -> None:
+        """Validate that required fields are populated after defaults are applied.
+
+        ``engine`` and ``task`` are always required. ``model`` may be omitted
+        (engine default will be used) but if supplied it must be a non‑empty
+        string. ``output_dir`` if provided must be a non‑empty path string.
+        """
+        if not self.engine:
+            raise ValueError("TranscriptionOptions.engine must be set")
+        if not isinstance(self.task, Task):
+            raise ValueError("TranscriptionOptions.task must be a Task enum value")
+        if self.model is not None and not str(self.model).strip():
+            raise ValueError("TranscriptionOptions.model cannot be an empty string")
+        if self.output_dir is not None and not str(self.output_dir).strip():
+            raise ValueError("TranscriptionOptions.output_dir cannot be an empty string")
+
     def merged_model(self, default: str) -> str:
         return self.model or default
 

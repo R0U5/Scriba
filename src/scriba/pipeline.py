@@ -124,6 +124,13 @@ class Pipeline:
         workdir = settings.work_dir / job.id
         workdir.mkdir(parents=True, exist_ok=True)
 
+        # Validate job options before any processing starts. This catches
+        # missing required fields early and provides a clear error message.
+        try:
+            job.options.validate({})
+        except Exception as exc:
+            raise ScribaError(str(exc)) from exc
+
         job.status = JobStatus.RUNNING
         job.started_at = time.time()
         started = time.monotonic()

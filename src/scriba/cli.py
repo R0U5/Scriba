@@ -41,20 +41,37 @@ def _version_callback(value: bool) -> None:
         raise typer.Exit()
 
 
+# Make ``serve`` the default command while preserving Typer's option handling.
+# Hidden options mirror the ``serve`` command; they become defaults when the
+# CLI is invoked without a sub‑command.
 @app.callback(invoke_without_command=True)
 def main_callback(
     ctx: typer.Context,
     version: bool = typer.Option(
-        False, "--version", "-V", callback=_version_callback, is_eager=True,
+        False,
+        "--version",
+        "-V",
+        callback=_version_callback,
+        is_eager=True,
         help="Show the version and exit.",
     ),
+    host: str = typer.Option(None, hidden=True),
+    port: int = typer.Option(None, hidden=True),
+    output: Path | None = typer.Option(None, "--output", "-o", hidden=True),
+    no_browser: bool = typer.Option(False, "--no-browser", hidden=True),
+    reload: bool = typer.Option(False, "--reload", hidden=True),
+    log_level: str = typer.Option("INFO", "--log-level", hidden=True),
 ) -> None:
-    """Run with no arguments to open the web interface."""
+    """Run with no arguments – start the web UI (default command)."""
     if ctx.invoked_subcommand is None:
-        # Call the implementation, not the Typer command: invoking a command
-        # function directly hands it Typer's OptionInfo sentinels instead of
-        # the defaults, and settings validation then fails on every field.
-        _run_server()
+        _run_server(
+            host=host,
+            port=port,
+            output=output,
+            no_browser=no_browser,
+            reload=reload,
+            log_level=log_level,
+        )
 
 
 # --------------------------------------------------------------------------- #
@@ -85,7 +102,13 @@ def _run_server(
     reload: bool = False,
     log_level: str = "INFO",
 ) -> None:
-    """Start the web server. Shared by `scriba serve` and the bare `scriba`."""
+    """Start the web server.
+
+    This helper is used by the ``serve`` sub‑command and by the default CLI
+    entry point (no sub‑command). It loads settings (overriding host/port/output
+    when provided), ensures directories exist, configures logging, selects a
+    free port if the desired one is occupied, and finally runs the ASGI server.
+    """
     settings = load_settings(host=host, port=port, output_dir=output, log_level=log_level)
     if no_browser:
         settings.open_browser = False
