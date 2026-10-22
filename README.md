@@ -63,9 +63,7 @@ produce true word-level timings, while Canary-Qwen returns text without
 timestamps (Scriba interpolates sentence timings inside each window and
 labels them as approximate).
 
-### On a 12 GB card (RTX 4070) with 32 GB RAM
-
-Every model in the table fits with room to spare. A practical setup:
+### Every model in the table fits with room to spare. A practical setup:
 
 - **Default to Whisper large-v3** — 99 languages, translation, exact timings.
 - **Switch to Parakeet TDT v3** for long English/European recordings; it is
